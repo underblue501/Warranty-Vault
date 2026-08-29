@@ -55,13 +55,14 @@ npx playwright install chromium
 npm test
 ```
 
-51 tests drive `index.html` in a real browser (Playwright + the built-in
+62 tests drive `index.html` in a real browser (Playwright + the built-in
 `node --test` runner), so they exercise the browser's own `Date` and `Intl`
 behaviour rather than a stand-in. Coverage: date handling across six
 timezones from UTC-8 to UTC+14, month-end and DST edges, `.ics` validity
 against RFC 5545, storage-failure and corrupt-data paths, the receipt-scan
 request shape and each of its error paths, and the claim-letter, download,
-clipboard, search and escaping behaviour of the UI.
+clipboard, search and escaping behaviour of the UI, plus form submission,
+price validation, duplicate detection and the extend-coverage record.
 
 Colour contrast is measured from the browser's own computed styles rather
 than from hex literals, so retuning the palette re-checks it against the
