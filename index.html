@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warranty Vault</title>
+<style>
+  :root{
+    --ink:#1B2A4A;
+    --ink-soft:#4A5A78;
+    --paper:#FAFAF7;
+    --paper-edge:#EDEDE6;
+    --stamp:#C8102E;
+    --safe:#1F7A4D;
+    --warn:#B26A00;
+    --line:#D8D8CE;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--ink);
+    color:var(--ink);
+    font-family:Georgia,'Times New Roman',serif;
+    min-height:100vh;
+    padding:0 0 60px;
+  }
+  .wrap{max-width:520px;margin:0 auto;padding:0 14px}
+
+  header{padding:34px 0 22px;color:var(--paper);text-align:center}
+  .brand{
+    font-family:'Courier New',Courier,monospace;
+    font-weight:700;letter-spacing:.32em;font-size:13px;
+    text-transform:uppercase;color:#9FB0CE;
+  }
+  header h1{font-size:34px;font-weight:400;letter-spacing:-.01em;margin-top:8px}
+  header p{color:#9FB0CE;font-size:14px;margin-top:8px;font-style:italic}
+
+  .stats{
+    display:flex;gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:6px;overflow:hidden;
+    margin-bottom:18px;
+  }
+  .stat{flex:1;background:var(--paper);padding:12px 8px;text-align:center}
+  .stat b{display:block;font-family:'Courier New',monospace;font-size:20px}
+  .stat span{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-soft)}
+
+  /* Alerts strip */
+  .alerts{
+    background:#FFF6E8;border:1px solid #E8C98F;border-radius:6px;
+    padding:12px 14px;margin-bottom:16px;font-size:14px;line-height:1.5;
+  }
+  .alerts b{font-family:'Courier New',monospace;font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--warn);display:block;margin-bottom:4px}
+
+  .receipt{
+    background:var(--paper);
+    border-radius:6px;
+    padding:18px 18px 14px;
+    position:relative;
+    margin-bottom:16px;
+    box-shadow:0 2px 0 rgba(0,0,0,.25);
+  }
+  .receipt::after{
+    content:"";position:absolute;left:0;right:0;bottom:-6px;height:12px;
+    background:radial-gradient(circle at 8px 0, var(--ink) 5px, transparent 5.5px) repeat-x;
+    background-size:16px 12px;
+  }
+  .rc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .rc-name{font-size:18px;line-height:1.25}
+  .rc-meta{
+    font-family:'Courier New',monospace;font-size:12px;color:var(--ink-soft);
+    margin-top:6px;letter-spacing:.02em;
+  }
+  .rc-line{border:none;border-top:1px dashed var(--line);margin:12px 0 10px}
+  .rc-bottom{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+  .rc-price{font-family:'Courier New',monospace;font-size:14px}
+
+  .stamp{
+    font-family:'Courier New',monospace;font-weight:700;font-size:11px;
+    letter-spacing:.08em;text-transform:uppercase;
+    border:2px solid currentColor;border-radius:4px;
+    padding:5px 8px;transform:rotate(-4deg);
+    white-space:nowrap;flex-shrink:0;
+  }
+  .stamp.safe{color:var(--safe)}
+  .stamp.warn{color:var(--warn)}
+  .stamp.dead{color:var(--stamp)}
+
+  .rc-actions{display:flex;gap:14px;flex-wrap:wrap}
+  .rc-actions button{
+    background:none;border:none;cursor:pointer;
+    font-family:'Courier New',monospace;font-size:12px;
+    text-decoration:underline;color:var(--ink-soft);padding:4px 0;
+  }
+  .rc-actions button.claim{color:var(--stamp);font-weight:700}
+
+  /* Offer card (the revenue loop) */
+  .offer{
+    margin-top:12px;border:1px dashed var(--warn);border-radius:4px;
+    background:#FFFDF6;padding:12px;display:flex;justify-content:space-between;
+    align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .offer p{font-size:13px;line-height:1.45;flex:1;min-width:180px}
+  .offer p b{font-family:'Courier New',monospace;font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--warn);display:block;margin-bottom:2px}
+  .offer button{
+    border:none;border-radius:4px;background:var(--warn);color:#fff;
+    font-family:'Courier New',monospace;font-weight:700;font-size:11px;
+    letter-spacing:.1em;text-transform:uppercase;padding:9px 12px;cursor:pointer;
+  }
+  .extended-note{
+    font-family:'Courier New',monospace;font-size:11px;color:var(--safe);
+    margin-top:8px;letter-spacing:.04em;
+  }
+
+  .add-card{background:var(--paper);border-radius:6px;padding:18px;margin-bottom:22px}
+  .add-card h2{
+    font-family:'Courier New',monospace;font-size:12px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.2em;margin-bottom:12px;
+    color:var(--ink-soft);
+  }
+
+  /* Scan zone */
+  .scan{
+    border:1.5px dashed var(--ink-soft);border-radius:4px;padding:14px;
+    text-align:center;margin-bottom:14px;cursor:pointer;background:#fff;
+  }
+  .scan:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+  .scan .big{font-size:15px}
+  .scan .sub{font-family:'Courier New',monospace;font-size:11px;color:var(--ink-soft);
+    letter-spacing:.06em;margin-top:4px}
+  .scan.busy{opacity:.6;pointer-events:none}
+  #scanStatus{
+    font-family:'Courier New',monospace;font-size:12px;margin-bottom:12px;
+    color:var(--ink-soft);display:none;
+  }
+  #scanStatus.err{color:var(--stamp)}
+  #scanStatus.ok{color:var(--safe)}
+
+  .field{margin-bottom:10px}
+  .row{display:flex;gap:10px}
+  .row .field{flex:1}
+  label{
+    display:block;font-family:'Courier New',monospace;font-size:10px;
+    text-transform:uppercase;letter-spacing:.14em;color:var(--ink-soft);
+    margin-bottom:4px;
+  }
+  input,select{
+    width:100%;padding:10px;border:1px solid var(--line);border-radius:4px;
+    background:#fff;font-family:Georgia,serif;font-size:15px;color:var(--ink);
+  }
+  input:focus,select:focus{outline:2px solid var(--ink);outline-offset:1px}
+  .btn{
+    width:100%;padding:13px;margin-top:6px;border:none;border-radius:4px;
+    background:var(--ink);color:var(--paper);
+    font-family:'Courier New',monospace;font-weight:700;font-size:13px;
+    letter-spacing:.18em;text-transform:uppercase;cursor:pointer;
+  }
+  .btn:active{transform:translateY(1px)}
+
+  .empty{color:#9FB0CE;text-align:center;font-style:italic;padding:26px 10px;font-size:15px}
+
+  .modal{
+    position:fixed;inset:0;background:rgba(27,42,74,.85);
+    display:none;align-items:center;justify-content:center;padding:16px;z-index:10;
+  }
+  .modal.open{display:flex}
+  .letter{
+    background:var(--paper);border-radius:6px;max-width:480px;width:100%;
+    max-height:82vh;overflow:auto;padding:22px;
+  }
+  .letter h3{font-family:'Courier New',monospace;font-size:13px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:12px}
+  .letter pre{
+    white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;line-height:1.55;
+    border:1px dashed var(--line);padding:14px;border-radius:4px;background:#fff;
+  }
+  .letter .btn{margin-top:12px}
+  .letter .close{background:none;border:none;color:var(--ink-soft);width:100%;padding:10px;font-family:'Courier New',monospace;font-size:12px;text-decoration:underline;cursor:pointer}
+
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Warranty Vault</div>
+    <h1>Stop paying for repairs you already paid for.</h1>
+    <p>Every purchase, its coverage, and the day it runs out.</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><b id="stCount">0</b><span>Items</span></div>
+    <div class="stat"><b id="stValue">$0</b><span>Value covered</span></div>
+    <div class="stat"><b id="stSoon">0</b><span>Expiring soon</span></div>
+  </div>
+
+  <div class="alerts" id="alerts" style="display:none"></div>
+
+  <div class="add-card">
+    <h2>Log a purchase</h2>
+
+    <div class="scan" id="scanZone" role="button" tabindex="0">
+      <div class="big">📷 Scan a receipt</div>
+      <div class="sub">Photo in, fields filled — powered by AI</div>
+    </div>
+    <input type="file" id="scanInput" accept="image/*" style="display:none">
+    <p id="scanStatus"></p>
+
+    <div class="field"><label for="fName">Item</label><input id="fName" placeholder="e.g. Dyson V15 vacuum"></div>
+    <div class="row">
+      <div class="field"><label for="fPrice">Price ($)</label><input id="fPrice" type="number" inputmode="decimal" placeholder="649"></div>
+      <div class="field"><label for="fDate">Purchased</label><input id="fDate" type="date"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="fMonths">Warranty</label>
+        <select id="fMonths">
+          <option value="12">12 months</option>
+          <option value="6">6 months</option>
+          <option value="24">24 months</option>
+          <option value="36">36 months</option>
+          <option value="60">60 months</option>
+        </select>
+      </div>
+      <div class="field"><label for="fStore">Retailer</label><input id="fStore" placeholder="e.g. Best Buy"></div>
+    </div>
+    <button class="btn" id="addBtn">File it in the vault</button>
+  </div>
+
+  <div id="list"></div>
+  <p class="empty" id="emptyMsg">The vault is empty. Log your first purchase above — future-you will thank you.</p>
+</div>
+
+<div class="modal" id="modal">
+  <div class="letter">
+    <h3 id="modalTitle">Claim letter — ready to send</h3>
+    <pre id="letterText"></pre>
+    <button class="btn" id="copyBtn">Copy letter</button>
+    <button class="close" id="closeBtn">Close</button>
+  </div>
+</div>
+
+<script>
+let items = [];
+const KEY = 'vault-items';
+
+async function load(){
+  try{
+    const r = await window.storage.get(KEY);
+    if(r && r.value) items = JSON.parse(r.value);
+  }catch(e){ items = []; }
+  render();
+}
+async function save(){
+  try{ await window.storage.set(KEY, JSON.stringify(items)); }catch(e){}
+}
+
+function daysLeft(it){
+  const end = new Date(it.date);
+  end.setMonth(end.getMonth() + Number(it.months));
+  return Math.ceil((end - new Date()) / 86400000);
+}
+function endDateObj(it){
+  const end = new Date(it.date);
+  end.setMonth(end.getMonth() + Number(it.months));
+  return end;
+}
+function endDate(it){
+  return endDateObj(it).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+
+function render(){
+  const list = document.getElementById('list');
+  const sorted = [...items].sort((a,b)=>daysLeft(a)-daysLeft(b));
+  list.innerHTML = '';
+  let value = 0, soon = 0;
+  const expiring = [];
+
+  sorted.forEach(it=>{
+    const d = daysLeft(it);
+    if(d > 0) value += Number(it.price)||0;
+    if(d > 0 && d <= 30){ soon++; expiring.push(it); }
+    let cls='safe', txt = d + ' days left';
+    if(d <= 0){ cls='dead'; txt='Expired'; }
+    else if(d <= 30){ cls='warn'; txt='⚠ ' + d + ' days left'; }
+
+    const card = document.createElement('div');
+    card.className='receipt';
+
+    let offerHtml = '';
+    if(d > 0 && d <= 30 && !it.extended){
+      const yearly = Math.max(9, Math.round((Number(it.price)||100) * 0.10));
+      offerHtml =
+        '<div class="offer"><p><b>Partner offer · simulated</b>'+
+        'Coverage ends soon. Extend 12 more months for about $'+yearly+'/yr.</p>'+
+        '<button data-extend="'+it.id+'">Extend coverage</button></div>';
+    }
+    const extendedNote = it.extended ? '<div class="extended-note">✓ Coverage extended — partner plan active</div>' : '';
+
+    card.innerHTML =
+      '<div class="rc-top"><div><div class="rc-name">'+esc(it.name)+'</div>'+
+      '<div class="rc-meta">'+esc(it.store||'—')+' · bought '+new Date(it.date).toLocaleDateString()+' · covered thru '+endDate(it)+'</div></div>'+
+      '<div class="stamp '+cls+'">'+txt+'</div></div>'+
+      '<hr class="rc-line">'+
+      '<div class="rc-bottom"><span class="rc-price">$'+(Number(it.price)||0).toLocaleString()+'</span>'+
+      '<span class="rc-actions"><button class="claim" data-claim="'+it.id+'">File a claim</button>'+
+      '<button data-remind="'+it.id+'">Remind me</button>'+
+      '<button data-del="'+it.id+'">Remove</button></span></div>'+
+      extendedNote + offerHtml;
+    list.appendChild(card);
+  });
+
+  // Alerts strip
+  const alerts = document.getElementById('alerts');
+  if(expiring.length){
+    alerts.style.display='block';
+    alerts.innerHTML = '<b>Expiry watch</b>' +
+      expiring.map(it=>esc(it.name)+' — '+daysLeft(it)+' days remaining').join('<br>') +
+      '<br><span style="font-size:12px;color:var(--ink-soft)">Tap "Remind me" on an item to add a calendar reminder.</span>';
+  } else {
+    alerts.style.display='none';
+  }
+
+  document.getElementById('stCount').textContent = items.length;
+  document.getElementById('stValue').textContent = '$' + value.toLocaleString();
+  document.getElementById('stSoon').textContent = soon;
+  document.getElementById('emptyMsg').style.display = items.length ? 'none' : 'block';
+}
+
+/* ---------- AI receipt scan ---------- */
+const scanZone = document.getElementById('scanZone');
+const scanInput = document.getElementById('scanInput');
+const scanStatus = document.getElementById('scanStatus');
+
+scanZone.addEventListener('click', ()=>scanInput.click());
+scanZone.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();scanInput.click();} });
+
+scanInput.addEventListener('change', async ()=>{
+  const file = scanInput.files[0];
+  if(!file) return;
+  scanZone.classList.add('busy');
+  setStatus('Reading your receipt…','');
+  try{
+    const base64 = await new Promise((res, rej)=>{
+      const r = new FileReader();
+      r.onload = ()=>res(r.result.split(',')[1]);
+      r.onerror = ()=>rej(new Error('Could not read the image.'));
+      r.readAsDataURL(file);
+    });
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:1000,
+        messages:[{
+          role:'user',
+          content:[
+            { type:'image', source:{ type:'base64', media_type:file.type||'image/jpeg', data:base64 } },
+            { type:'text', text:
+'This is a photo of a purchase receipt. Extract the main purchased item and respond ONLY with a JSON object, no markdown fences, no preamble, in exactly this shape: {"name":"item name","price":123.45,"date":"YYYY-MM-DD","store":"retailer name","months":12}. For months, estimate the typical manufacturer warranty length in months for this kind of product (6, 12, 24, 36, or 60). If a field is unreadable, use null. If this is not a receipt, respond with {"error":"not a receipt"}.' }
+          ]
+        }]
+      })
+    });
+    const data = await response.json();
+    const text = (data.content||[]).map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(text);
+    if(parsed.error) throw new Error('That image does not look like a receipt.');
+
+    if(parsed.name) document.getElementById('fName').value = parsed.name;
+    if(parsed.price != null) document.getElementById('fPrice').value = parsed.price;
+    if(parsed.date) document.getElementById('fDate').value = parsed.date;
+    if(parsed.store) document.getElementById('fStore').value = parsed.store;
+    if(parsed.months){
+      const sel = document.getElementById('fMonths');
+      const opt = [...sel.options].find(o=>o.value == String(parsed.months));
+      if(opt) sel.value = String(parsed.months);
+    }
+    setStatus('✓ Fields filled from your receipt. Check them, then file it.','ok');
+  }catch(err){
+    setStatus('Scan failed — '+err.message+' You can still enter it by hand.','err');
+  }finally{
+    scanZone.classList.remove('busy');
+    scanInput.value='';
+  }
+});
+
+function setStatus(msg, kind){
+  scanStatus.textContent = msg;
+  scanStatus.className = kind;
+  scanStatus.style.display = 'block';
+}
+
+/* ---------- Add / list actions ---------- */
+document.getElementById('addBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('fName').value.trim();
+  const date = document.getElementById('fDate').value;
+  if(!name || !date){ alert('An item name and purchase date are needed to file it.'); return; }
+  items.push({
+    id: Date.now(),
+    name,
+    price: document.getElementById('fPrice').value,
+    date,
+    months: document.getElementById('fMonths').value,
+    store: document.getElementById('fStore').value.trim(),
+    extended: false
+  });
+  await save();
+  document.getElementById('fName').value='';
+  document.getElementById('fPrice').value='';
+  document.getElementById('fStore').value='';
+  scanStatus.style.display='none';
+  render();
+});
+
+document.getElementById('list').addEventListener('click', async e=>{
+  const del = e.target.dataset.del,
+        clm = e.target.dataset.claim,
+        ext = e.target.dataset.extend,
+        rem = e.target.dataset.remind;
+  if(del){
+    items = items.filter(i=>i.id != del);
+    await save(); render();
+  }
+  if(clm) openLetter(items.find(i=>i.id == clm));
+  if(rem) openReminder(items.find(i=>i.id == rem));
+  if(ext){
+    const it = items.find(i=>i.id == ext);
+    it.months = Number(it.months) + 12;
+    it.extended = true;
+    await save(); render();
+  }
+});
+
+/* ---------- Claim letter ---------- */
+function openLetter(it){
+  document.getElementById('modalTitle').textContent = 'Claim letter — ready to send';
+  const txt =
+'To the Customer Service team' + (it.store ? ' at '+it.store : '') + ',\n\n' +
+'I am writing to file a warranty claim for the following purchase:\n\n' +
+'  Item:            ' + it.name + '\n' +
+'  Purchase date:   ' + new Date(it.date).toLocaleDateString() + '\n' +
+'  Purchase price:  $' + Number(it.price||0).toLocaleString() + '\n' +
+'  Coverage ends:   ' + endDate(it) + '\n\n' +
+'The item has developed a fault within the warranty period, and I am requesting a repair, replacement, or refund as provided under the terms of the warranty. I have my proof of purchase available on request.\n\n' +
+'Please confirm receipt of this claim and the next steps within 5 business days.\n\n' +
+'Thank you,\n[Your name]\n[Your contact details]';
+  document.getElementById('letterText').textContent = txt;
+  document.getElementById('copyBtn').textContent = 'Copy letter';
+  document.getElementById('modal').classList.add('open');
+}
+
+/* ---------- Calendar reminder (.ics content) ---------- */
+function openReminder(it){
+  const end = endDateObj(it);
+  const remind = new Date(end); remind.setDate(remind.getDate()-14);
+  const stamp = d => d.toISOString().slice(0,10).replace(/-/g,'');
+  const ics =
+'BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//WarrantyVault//EN\nBEGIN:VEVENT\n' +
+'UID:' + it.id + '@warrantyvault\n' +
+'DTSTART;VALUE=DATE:' + stamp(remind) + '\n' +
+'SUMMARY:Warranty ending soon: ' + it.name + '\n' +
+'DESCRIPTION:Coverage on ' + it.name + ' ends ' + endDate(it) + '. Check it over and file any claim before then.\n' +
+'END:VEVENT\nEND:VCALENDAR';
+  document.getElementById('modalTitle').textContent = 'Calendar reminder — 2 weeks before expiry';
+  document.getElementById('letterText').textContent = ics;
+  document.getElementById('copyBtn').textContent = 'Copy .ics text';
+  document.getElementById('modal').classList.add('open');
+}
+
+document.getElementById('copyBtn').addEventListener('click', ()=>{
+  navigator.clipboard.writeText(document.getElementById('letterText').textContent)
+    .then(()=>{ const b=document.getElementById('copyBtn'); const old=b.textContent;
+      b.textContent='Copied ✓'; setTimeout(()=>b.textContent=old,1500); });
+});
+document.getElementById('closeBtn').addEventListener('click', ()=>{
+  document.getElementById('modal').classList.remove('open');
+});
+
+document.getElementById('fDate').valueAsDate = new Date();
+load();
+</script>
+</body>
+</html>
