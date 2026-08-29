@@ -46,3 +46,14 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Typecheck the backend
+        run: npm run typecheck --prefix backend
+
+      - name: Run backend tests
+        run: npm test --prefix backend

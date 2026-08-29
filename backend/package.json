@@ -1,0 +1,22 @@
+{
+  "name": "warranty-vault-scan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Receipt-scanning backend for Warranty Vault. Holds the Anthropic API key so the browser never sees it.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260829.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.127.1"
+  }
+}

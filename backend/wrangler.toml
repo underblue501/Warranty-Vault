@@ -1,0 +1,26 @@
+name = "warranty-vault-scan"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Origins allowed to call this Worker. Leave empty ONLY for local testing -
+# an empty list disables the origin check.
+ALLOWED_ORIGINS = "https://underblue501.github.io"
+
+# Both are optional; the defaults are in src/index.ts.
+SCAN_MODEL = "claude-opus-5"
+SCAN_EFFORT = "low"
+MAX_IMAGE_BYTES = "5242880"
+RATE_LIMIT_PER_MINUTE = "12"
+
+# Bind a KV namespace so the rate limit holds across isolates. Create it with
+#   npx wrangler kv namespace create RATE_LIMIT
+# and paste the id it prints. Without this the limiter still runs, but only
+# within a single isolate.
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT"
+# id = "<paste the id here>"
+
+# The API key is a secret, never a var:
+#   npx wrangler secret put ANTHROPIC_API_KEY

@@ -43,7 +43,7 @@ test('the request carries the headers the Messages API requires', async () => {
   assert.equal(r.request.headers['anthropic-version'], '2023-06-01');
   assert.equal(r.request.headers['anthropic-dangerous-direct-browser-access'], 'true');
   assert.equal(r.request.headers['content-type'], 'application/json');
-  assert.equal(r.request.body.model, 'claude-sonnet-5');
+  assert.equal(r.request.body.model, 'claude-opus-5');
   assert.ok(r.request.body.messages[0].content.some(c => c.type === 'image'), 'the image is attached');
 });
 
