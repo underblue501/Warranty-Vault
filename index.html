@@ -269,9 +269,10 @@
     <input type="file" id="scanInput" accept="image/*" style="display:none">
     <p id="scanStatus"></p>
 
+    <form id="addForm">
     <div class="field"><label for="fName">Item</label><input id="fName" placeholder="e.g. Dyson V15 vacuum"></div>
     <div class="row">
-      <div class="field"><label for="fPrice">Price ($)</label><input id="fPrice" type="number" inputmode="decimal" placeholder="649"></div>
+      <div class="field"><label for="fPrice">Price ($)</label><input id="fPrice" type="number" inputmode="decimal" min="0" step="0.01" placeholder="649"></div>
       <div class="field"><label for="fDate">Purchased</label><input id="fDate" type="date"></div>
     </div>
     <div class="row">
@@ -296,7 +297,8 @@
       </div>
     </div>
     <div class="field"><label for="fStore">Retailer</label><input id="fStore" placeholder="e.g. Best Buy"></div>
-    <button class="btn" id="addBtn">File it in the vault</button>
+    <button class="btn" id="addBtn" type="submit">File it in the vault</button>
+    </form>
   </div>
 
   <div class="toolbar" id="toolbar" style="display:none">
@@ -477,7 +479,14 @@ function render(){
         'Coverage ends soon. Extend 12 more months for about $'+yearly+'/yr.</p>'+
         '<button data-extend="'+it.id+'">Extend coverage</button></div>';
     }
-    const extendedNote = it.extended ? '<div class="extended-note">✓ Coverage extended — partner plan active</div>' : '';
+    let extendedNote = '';
+    if(it.extended){
+      const base = Number(it.baseMonths), added = Number(it.extensionMonths);
+      // Items extended before the terms were recorded separately fall back.
+      extendedNote = (base && added)
+        ? '<div class="extended-note">✓ ' + base + ' months manufacturer + ' + added + ' months partner plan</div>'
+        : '<div class="extended-note">✓ Coverage extended — partner plan active</div>';
+    }
 
     card.innerHTML =
       '<div class="rc-top"><div><div class="rc-name">'+esc(it.name)+'</div>'+
@@ -672,16 +681,37 @@ function setStatus(msg, kind){
 }
 
 /* ---------- Add / list actions ---------- */
-document.getElementById('addBtn').addEventListener('click', async ()=>{
+document.getElementById('addForm').addEventListener('submit', async e=>{
+  e.preventDefault();
   const name = document.getElementById('fName').value.trim();
   const date = document.getElementById('fDate').value;
   if(!name || !date){ alert('An item name and purchase date are needed to file it.'); return; }
+
+  const rawPrice = document.getElementById('fPrice').value.trim();
+  const price = rawPrice === '' ? null : Number(rawPrice);
+  if(price !== null && (!isFinite(price) || price < 0)){
+    alert('The price needs to be a number that is not negative.');
+    return;
+  }
+
+  // Scanning the same receipt twice, or filing an item again by hand, used to
+  // create a silent duplicate.
+  const dupe = items.find(i =>
+    String(i.name || '').trim().toLowerCase() === name.toLowerCase() && i.date === date);
+  if(dupe && !confirm(
+      '"' + name + '" bought on ' + buyDate({date:date}) + ' is already in the vault.\n\nFile it again anyway?')){
+    return;
+  }
+
+  const months = Number(document.getElementById('fMonths').value) || 12;
   items.push({
     id: newId(),
     name,
-    price: document.getElementById('fPrice').value,
+    price,
     date,
-    months: document.getElementById('fMonths').value,
+    months,
+    baseMonths: months,
+    extensionMonths: 0,
     store: document.getElementById('fStore').value.trim(),
     cat: document.getElementById('fCat').value,
     extended: false
@@ -711,7 +741,12 @@ document.getElementById('list').addEventListener('click', async e=>{
   if(ext){
     const it = items.find(i=>sameId(i.id, ext));
     if(!it) return;
-    it.months = Number(it.months) + 12;
+    const current = Number(it.months) || 0;
+    // Record the manufacturer term the first time, so the purchased extension
+    // stays distinguishable from the warranty the item came with.
+    if(it.baseMonths == null) it.baseMonths = current;
+    it.extensionMonths = (Number(it.extensionMonths) || 0) + 12;
+    it.months = (Number(it.baseMonths) || 0) + it.extensionMonths;
     it.extended = true;
     await save(); render();
   }
