@@ -87,3 +87,27 @@ test('text on the dark page background stays legible', async () => {
     assert.ok(r.brand >= 4.5, `brand text is ${r.brand.toFixed(2)}:1`);
   });
 });
+
+test('the vault tools and import status stay legible on the dark ground', async () => {
+  await withPage({ timezoneId: 'UTC' }, async page => {
+    const idle = await ratios(page, { importBtn: '#importBtn' });
+    assert.ok(idle.importBtn >= 4.5, `import button is ${idle.importBtn.toFixed(2)}:1`);
+
+    // Success wording.
+    await page.setInputFiles('#importInput', {
+      name: 'b.json', mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({ items: [{ id: 'a', name: 'X', date: '2026-01-31', months: 12 }] }))
+    });
+    await page.waitForFunction(() => document.getElementById('importStatus').classList.contains('ok'));
+    const ok = await ratios(page, { status: '#importStatus' });
+    assert.ok(ok.status >= 4.5, `import success text is ${ok.status.toFixed(2)}:1`);
+
+    // Failure wording.
+    await page.setInputFiles('#importInput', {
+      name: 'x.txt', mimeType: 'application/json', buffer: Buffer.from('not json')
+    });
+    await page.waitForFunction(() => document.getElementById('importStatus').classList.contains('err'));
+    const err = await ratios(page, { status: '#importStatus' });
+    assert.ok(err.status >= 4.5, `import error text is ${err.status.toFixed(2)}:1`);
+  });
+});
