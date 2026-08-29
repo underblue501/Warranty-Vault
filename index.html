@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Point this at your deployed scan Worker to enable receipt scanning on the
+     open web. See backend/README.md. Left empty, the app calls the Anthropic
+     API directly, which only works inside a Claude artifact. -->
+<meta name="scan-endpoint" content="">
 <title>Warranty Vault</title>
 <style>
   :root{
@@ -743,6 +747,67 @@ const scanStatus = document.getElementById('scanStatus');
 scanZone.addEventListener('click', ()=>scanInput.click());
 scanZone.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();scanInput.click();} });
 
+/* With a backend configured the API key stays on the server. Without one the
+   page calls the API directly, which only works inside a Claude artifact where
+   the environment supplies credentials. */
+function scanEndpoint(){
+  if(typeof window.WARRANTY_VAULT_SCAN_ENDPOINT === 'string' && window.WARRANTY_VAULT_SCAN_ENDPOINT.trim()){
+    return window.WARRANTY_VAULT_SCAN_ENDPOINT.trim();
+  }
+  const meta = document.querySelector('meta[name="scan-endpoint"]');
+  return meta && meta.content ? meta.content.trim() : '';
+}
+
+async function readError(response){
+  const data = await response.json().catch(()=>null);
+  const detail = data && data.error && (data.error.message || data.error);
+  return typeof detail === 'string' && detail
+    ? detail
+    : 'the service returned ' + response.status + ' ' + response.statusText + '.';
+}
+
+async function scanViaBackend(base64, type){
+  const response = await fetch(scanEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ image: base64, media_type: type || 'image/jpeg' })
+  });
+  if(!response.ok) throw new Error(await readError(response));
+  const parsed = await response.json().catch(()=>null);
+  if(!parsed) throw new Error('the response could not be read.');
+  return parsed;
+}
+
+async function scanViaAnthropicDirect(base64, type){
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body: JSON.stringify({
+      model:'claude-opus-5',
+      max_tokens:4096,
+      messages:[{
+        role:'user',
+        content:[
+          { type:'image', source:{ type:'base64', media_type:type||'image/jpeg', data:base64 } },
+          { type:'text', text:
+'This is a photo of a purchase receipt. Extract the main purchased item and respond ONLY with a JSON object, no markdown fences, no preamble, in exactly this shape: {"name":"item name","price":123.45,"date":"YYYY-MM-DD","store":"retailer name","months":12,"category":"Electronics"}. category must be one of: Electronics, Appliances, Furniture, Tools, Outdoor, Other. For months, estimate the typical manufacturer warranty length in months for this kind of product (6, 12, 24, 36, or 60). If a field is unreadable, use null. If this is not a receipt, respond with {"error":"not a receipt"}.' }
+        ]
+      }]
+    })
+  });
+  if(!response.ok) throw new Error(await readError(response));
+  const data = await response.json().catch(()=>null);
+  if(!data) throw new Error('the response could not be read.');
+  const text = (data.content||[]).map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
+  if(!text) throw new Error('the service returned an empty response.');
+  try{ return JSON.parse(text); }
+  catch(e){ throw new Error('the receipt could not be read from that image.'); }
+}
+
 scanInput.addEventListener('change', async ()=>{
   const file = scanInput.files[0];
   if(!file) return;
@@ -755,37 +820,9 @@ scanInput.addEventListener('change', async ()=>{
       r.onerror = ()=>rej(new Error('the image file could not be read.'));
       r.readAsDataURL(file);
     });
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body: JSON.stringify({
-        model:'claude-sonnet-5',
-        max_tokens:1000,
-        messages:[{
-          role:'user',
-          content:[
-            { type:'image', source:{ type:'base64', media_type:file.type||'image/jpeg', data:base64 } },
-            { type:'text', text:
-'This is a photo of a purchase receipt. Extract the main purchased item and respond ONLY with a JSON object, no markdown fences, no preamble, in exactly this shape: {"name":"item name","price":123.45,"date":"YYYY-MM-DD","store":"retailer name","months":12,"category":"Electronics"}. category must be one of: Electronics, Appliances, Furniture, Tools, Outdoor, Other. For months, estimate the typical manufacturer warranty length in months for this kind of product (6, 12, 24, 36, or 60). If a field is unreadable, use null. If this is not a receipt, respond with {"error":"not a receipt"}.' }
-          ]
-        }]
-      })
-    });
-    const data = await response.json().catch(()=>null);
-    if(!response.ok){
-      const detail = data && data.error && data.error.message;
-      throw new Error(detail || ('the service returned ' + response.status + ' ' + response.statusText + '.'));
-    }
-    if(!data) throw new Error('the response could not be read.');
-    const text = (data.content||[]).map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
-    if(!text) throw new Error('the service returned an empty response.');
-    let parsed;
-    try{ parsed = JSON.parse(text); }
-    catch(e){ throw new Error('the receipt could not be read from that image.'); }
+    const parsed = scanEndpoint()
+      ? await scanViaBackend(base64, file.type)
+      : await scanViaAnthropicDirect(base64, file.type);
     if(parsed.error) throw new Error('that image does not look like a receipt.');
 
     if(parsed.name) document.getElementById('fName').value = parsed.name;

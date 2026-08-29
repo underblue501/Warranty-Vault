@@ -1,1 +1,6 @@
 node_modules/
+
+# Wrangler local state and local secrets — .dev.vars holds a real API key
+.wrangler/
+.dev.vars
+.dev.vars.*

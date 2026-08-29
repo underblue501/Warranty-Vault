@@ -19,13 +19,26 @@ The app is a single dependency-free HTML file.
 
 Open `index.html` in a browser, or serve it with GitHub Pages: in the repo settings, enable Pages from the main branch and it will be live at `https://<your-username>.github.io/<repo-name>/`.
 
-## Known limitations outside Claude
+## Receipt scanning on the open web
 
-This prototype was built to run inside a Claude artifact. One capability is still provided by that environment:
+Out of the box the page calls the Anthropic API directly, which only works
+inside a Claude artifact where the environment supplies credentials. Anywhere
+else the scan button reports why it failed and manual entry still works.
 
-**Receipt scanning** calls the Anthropic API without an API key, which only works inside Claude. Anywhere else the scan button reports why it failed and manual entry still works. To enable it on the open web, route the request through a small backend that holds your own Anthropic API key (never put the key in client-side code).
+To enable scanning on the open web, deploy the Cloudflare Worker in
+[`backend/`](backend/) — it holds your API key server-side so the browser
+never sees it — then point the page at it:
 
-Everything else — logging, countdowns, alerts, claim letters, reminders, extensions — works anywhere.
+```html
+<meta name="scan-endpoint" content="https://your-worker.workers.dev/scan">
+```
+
+`backend/README.md` has the deploy steps and, importantly, the abuse-protection
+notes: the endpoint spends your money, so read them before putting the URL in
+a public page.
+
+Everything else — logging, countdowns, alerts, claim letters, reminders,
+extensions, export and import — works anywhere with no backend at all.
 
 ## Where your data lives
 
@@ -55,7 +68,7 @@ npx playwright install chromium
 npm test
 ```
 
-75 tests drive `index.html` in a real browser (Playwright + the built-in
+84 tests drive `index.html` in a real browser (Playwright + the built-in
 `node --test` runner), so they exercise the browser's own `Date` and `Intl`
 behaviour rather than a stand-in. Coverage: date handling across six
 timezones from UTC-8 to UTC+14, month-end and DST edges, `.ics` validity
@@ -69,9 +82,16 @@ Colour contrast is measured from the browser's own computed styles rather
 than from hex literals, so retuning the palette re-checks it against the
 WCAG AA 4.5:1 threshold automatically.
 
-CI runs the same suite on every pull request (`.github/workflows/ci.yml`).
+The backend has its own 13 tests (`npm test --prefix backend`) that inject a
+fake scanner, so they cover CORS, the origin check, the rate limiter, payload
+validation and error mapping without calling Anthropic or spending anything.
+
+CI runs both suites, plus a backend typecheck, on every pull request
+(`.github/workflows/ci.yml`).
 
 ## Tech
 
-Single-file HTML/CSS/JS. No frameworks, no build step, no runtime
-dependencies.
+The app is a single HTML/CSS/JS file — no frameworks, no build step, no
+runtime dependencies. The optional scanning backend in `backend/` is a
+TypeScript Cloudflare Worker using the Anthropic SDK; nothing in the app
+depends on it being deployed.
