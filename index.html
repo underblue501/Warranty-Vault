@@ -44,13 +44,56 @@
   .stat b{display:block;font-family:'Courier New',monospace;font-size:20px}
   .stat span{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-soft)}
 
-  /* Alerts strip */
   .alerts{
     background:#FFF6E8;border:1px solid #E8C98F;border-radius:6px;
     padding:12px 14px;margin-bottom:16px;font-size:14px;line-height:1.5;
   }
   .alerts b{font-family:'Courier New',monospace;font-size:11px;letter-spacing:.16em;
     text-transform:uppercase;color:var(--warn);display:block;margin-bottom:4px}
+
+  /* Ledger dashboard */
+  .ledger{
+    background:var(--paper);border-radius:6px;padding:16px 18px;margin-bottom:18px;
+  }
+  .ledger h2{
+    font-family:'Courier New',monospace;font-size:12px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.2em;color:var(--ink-soft);
+    margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;
+  }
+  .ledger h2 button{
+    background:none;border:none;cursor:pointer;color:var(--ink-soft);
+    font-family:'Courier New',monospace;font-size:11px;text-decoration:underline;
+  }
+  .led-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .led-row:last-child{border-bottom:none}
+  .led-cat{width:96px;flex-shrink:0}
+  .led-bar-track{flex:1;height:12px;background:#EFEFE8;border-radius:2px;overflow:hidden}
+  .led-bar{height:100%;background:var(--ink);border-radius:2px;min-width:2px}
+  .led-val{font-family:'Courier New',monospace;font-size:12px;width:74px;text-align:right;flex-shrink:0}
+  .led-total{
+    font-family:'Courier New',monospace;font-size:13px;font-weight:700;
+    display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;
+    border-top:2px solid var(--ink);
+  }
+  .led-sub{display:flex;justify-content:space-between;font-family:'Courier New',monospace;
+    font-size:11px;color:var(--ink-soft);margin-top:6px}
+
+  /* Search + filter toolbar */
+  .toolbar{margin-bottom:14px}
+  .search{
+    width:100%;padding:11px 12px;border:none;border-radius:6px;
+    background:var(--paper);font-family:'Courier New',monospace;font-size:14px;
+    color:var(--ink);
+  }
+  .search:focus{outline:2px solid #9FB0CE;outline-offset:1px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{
+    font-family:'Courier New',monospace;font-size:11px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;
+    border:1.5px solid #9FB0CE;border-radius:4px;color:#9FB0CE;
+    background:none;padding:5px 9px;cursor:pointer;
+  }
+  .chip.on{background:var(--paper);color:var(--ink);border-color:var(--paper);transform:rotate(-2deg)}
 
   .receipt{
     background:var(--paper);
@@ -70,6 +113,11 @@
   .rc-meta{
     font-family:'Courier New',monospace;font-size:12px;color:var(--ink-soft);
     margin-top:6px;letter-spacing:.02em;
+  }
+  .rc-cat{
+    display:inline-block;font-family:'Courier New',monospace;font-size:10px;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);
+    border:1px solid var(--line);border-radius:3px;padding:2px 6px;margin-top:8px;
   }
   .rc-line{border:none;border-top:1px dashed var(--line);margin:12px 0 10px}
   .rc-bottom{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
@@ -94,7 +142,6 @@
   }
   .rc-actions button.claim{color:var(--stamp);font-weight:700}
 
-  /* Offer card (the revenue loop) */
   .offer{
     margin-top:12px;border:1px dashed var(--warn);border-radius:4px;
     background:#FFFDF6;padding:12px;display:flex;justify-content:space-between;
@@ -120,7 +167,6 @@
     color:var(--ink-soft);
   }
 
-  /* Scan zone */
   .scan{
     border:1.5px dashed var(--ink-soft);border-radius:4px;padding:14px;
     text-align:center;margin-bottom:14px;cursor:pointer;background:#fff;
@@ -196,6 +242,11 @@
 
   <div class="alerts" id="alerts" style="display:none"></div>
 
+  <div class="ledger" id="ledger" style="display:none">
+    <h2>Vault ledger <button id="ledgerToggle">hide</button></h2>
+    <div id="ledgerBody"></div>
+  </div>
+
   <div class="add-card">
     <h2>Log a purchase</h2>
 
@@ -221,9 +272,24 @@
           <option value="60">60 months</option>
         </select>
       </div>
-      <div class="field"><label for="fStore">Retailer</label><input id="fStore" placeholder="e.g. Best Buy"></div>
+      <div class="field"><label for="fCat">Category</label>
+        <select id="fCat">
+          <option>Electronics</option>
+          <option>Appliances</option>
+          <option>Furniture</option>
+          <option>Tools</option>
+          <option>Outdoor</option>
+          <option>Other</option>
+        </select>
+      </div>
     </div>
+    <div class="field"><label for="fStore">Retailer</label><input id="fStore" placeholder="e.g. Best Buy"></div>
     <button class="btn" id="addBtn">File it in the vault</button>
+  </div>
+
+  <div class="toolbar" id="toolbar" style="display:none">
+    <input class="search" id="search" placeholder="🔍 search the vault…" aria-label="Search items">
+    <div class="chips" id="chips"></div>
   </div>
 
   <div id="list"></div>
@@ -241,17 +307,29 @@
 
 <script>
 let items = [];
+let searchQ = '';
+let filterCat = 'All';
+let ledgerOpen = true;
 const KEY = 'vault-items';
+const CATS = ['Electronics','Appliances','Furniture','Tools','Outdoor','Other'];
 
 async function load(){
   try{
-    const r = await window.storage.get(KEY);
-    if(r && r.value) items = JSON.parse(r.value);
-  }catch(e){ items = []; }
+    if(window.storage){
+      const r = await window.storage.get(KEY);
+      if(r && r.value) items = JSON.parse(r.value);
+    } else if(window.localStorage){
+      const v = localStorage.getItem(KEY);
+      if(v) items = JSON.parse(v);
+    }
+  }catch(e){ items = items.length ? items : []; }
   render();
 }
 async function save(){
-  try{ await window.storage.set(KEY, JSON.stringify(items)); }catch(e){}
+  try{
+    if(window.storage) await window.storage.set(KEY, JSON.stringify(items));
+    else if(window.localStorage) localStorage.setItem(KEY, JSON.stringify(items));
+  }catch(e){}
 }
 
 function daysLeft(it){
@@ -268,6 +346,7 @@ function endDate(it){
   return endDateObj(it).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
 }
 function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+function catOf(it){ return CATS.includes(it.cat) ? it.cat : 'Other'; }
 
 function render(){
   const list = document.getElementById('list');
@@ -275,11 +354,22 @@ function render(){
   list.innerHTML = '';
   let value = 0, soon = 0;
   const expiring = [];
+  const q = searchQ.toLowerCase();
+
+  const visible = sorted.filter(it=>{
+    const matchCat = filterCat==='All' || catOf(it)===filterCat;
+    const matchQ = !q || (it.name+' '+(it.store||'')+' '+catOf(it)).toLowerCase().includes(q);
+    return matchCat && matchQ;
+  });
 
   sorted.forEach(it=>{
     const d = daysLeft(it);
     if(d > 0) value += Number(it.price)||0;
     if(d > 0 && d <= 30){ soon++; expiring.push(it); }
+  });
+
+  visible.forEach(it=>{
+    const d = daysLeft(it);
     let cls='safe', txt = d + ' days left';
     if(d <= 0){ cls='dead'; txt='Expired'; }
     else if(d <= 30){ cls='warn'; txt='⚠ ' + d + ' days left'; }
@@ -299,7 +389,8 @@ function render(){
 
     card.innerHTML =
       '<div class="rc-top"><div><div class="rc-name">'+esc(it.name)+'</div>'+
-      '<div class="rc-meta">'+esc(it.store||'—')+' · bought '+new Date(it.date).toLocaleDateString()+' · covered thru '+endDate(it)+'</div></div>'+
+      '<div class="rc-meta">'+esc(it.store||'—')+' · bought '+new Date(it.date).toLocaleDateString()+' · covered thru '+endDate(it)+'</div>'+
+      '<span class="rc-cat">'+catOf(it)+'</span></div>'+
       '<div class="stamp '+cls+'">'+txt+'</div></div>'+
       '<hr class="rc-line">'+
       '<div class="rc-bottom"><span class="rc-price">$'+(Number(it.price)||0).toLocaleString()+'</span>'+
@@ -310,7 +401,10 @@ function render(){
     list.appendChild(card);
   });
 
-  // Alerts strip
+  if(items.length && !visible.length){
+    list.innerHTML = '<p class="empty">Nothing in the vault matches that. Clear the search or pick another category.</p>';
+  }
+
   const alerts = document.getElementById('alerts');
   if(expiring.length){
     alerts.style.display='block';
@@ -321,11 +415,62 @@ function render(){
     alerts.style.display='none';
   }
 
+  renderLedger();
+  renderChips();
+
+  document.getElementById('toolbar').style.display = items.length ? 'block' : 'none';
   document.getElementById('stCount').textContent = items.length;
   document.getElementById('stValue').textContent = '$' + value.toLocaleString();
   document.getElementById('stSoon').textContent = soon;
   document.getElementById('emptyMsg').style.display = items.length ? 'none' : 'block';
 }
+
+/* ---------- Ledger dashboard ---------- */
+function renderLedger(){
+  const wrap = document.getElementById('ledger');
+  const body = document.getElementById('ledgerBody');
+  if(!items.length){ wrap.style.display='none'; return; }
+  wrap.style.display='block';
+  document.getElementById('ledgerToggle').textContent = ledgerOpen ? 'hide' : 'show';
+  if(!ledgerOpen){ body.innerHTML=''; return; }
+
+  const byCat = {};
+  let activeVal = 0, expiredVal = 0, activeCount = 0, expiredCount = 0;
+  items.forEach(it=>{
+    const c = catOf(it), v = Number(it.price)||0;
+    const alive = daysLeft(it) > 0;
+    if(alive){ byCat[c] = (byCat[c]||0) + v; activeVal += v; activeCount++; }
+    else { expiredVal += v; expiredCount++; }
+  });
+  const max = Math.max(...Object.values(byCat), 1);
+  const rows = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>
+    '<div class="led-row"><span class="led-cat">'+c+'</span>'+
+    '<span class="led-bar-track"><span class="led-bar" style="width:'+Math.round(v/max*100)+'%"></span></span>'+
+    '<span class="led-val">$'+v.toLocaleString()+'</span></div>'
+  ).join('');
+  body.innerHTML =
+    (rows || '<div class="led-row"><span>No active coverage yet.</span></div>') +
+    '<div class="led-total"><span>Under protection</span><span>$'+activeVal.toLocaleString()+'</span></div>'+
+    '<div class="led-sub"><span>'+activeCount+' covered · '+expiredCount+' expired</span>'+
+    '<span>$'+expiredVal.toLocaleString()+' lapsed</span></div>';
+}
+document.getElementById('ledgerToggle').addEventListener('click', ()=>{
+  ledgerOpen = !ledgerOpen; renderLedger();
+});
+
+/* ---------- Search + chips ---------- */
+function renderChips(){
+  const present = ['All', ...CATS.filter(c=>items.some(it=>catOf(it)===c))];
+  document.getElementById('chips').innerHTML = present.map(c=>
+    '<button class="chip'+(filterCat===c?' on':'')+'" data-cat="'+c+'">'+c+'</button>'
+  ).join('');
+}
+document.getElementById('chips').addEventListener('click', e=>{
+  if(e.target.dataset.cat){ filterCat = e.target.dataset.cat; render(); }
+});
+document.getElementById('search').addEventListener('input', e=>{
+  searchQ = e.target.value; render();
+});
 
 /* ---------- AI receipt scan ---------- */
 const scanZone = document.getElementById('scanZone');
@@ -358,7 +503,7 @@ scanInput.addEventListener('change', async ()=>{
           content:[
             { type:'image', source:{ type:'base64', media_type:file.type||'image/jpeg', data:base64 } },
             { type:'text', text:
-'This is a photo of a purchase receipt. Extract the main purchased item and respond ONLY with a JSON object, no markdown fences, no preamble, in exactly this shape: {"name":"item name","price":123.45,"date":"YYYY-MM-DD","store":"retailer name","months":12}. For months, estimate the typical manufacturer warranty length in months for this kind of product (6, 12, 24, 36, or 60). If a field is unreadable, use null. If this is not a receipt, respond with {"error":"not a receipt"}.' }
+'This is a photo of a purchase receipt. Extract the main purchased item and respond ONLY with a JSON object, no markdown fences, no preamble, in exactly this shape: {"name":"item name","price":123.45,"date":"YYYY-MM-DD","store":"retailer name","months":12,"category":"Electronics"}. category must be one of: Electronics, Appliances, Furniture, Tools, Outdoor, Other. For months, estimate the typical manufacturer warranty length in months for this kind of product (6, 12, 24, 36, or 60). If a field is unreadable, use null. If this is not a receipt, respond with {"error":"not a receipt"}.' }
           ]
         }]
       })
@@ -372,6 +517,7 @@ scanInput.addEventListener('change', async ()=>{
     if(parsed.price != null) document.getElementById('fPrice').value = parsed.price;
     if(parsed.date) document.getElementById('fDate').value = parsed.date;
     if(parsed.store) document.getElementById('fStore').value = parsed.store;
+    if(parsed.category && CATS.includes(parsed.category)) document.getElementById('fCat').value = parsed.category;
     if(parsed.months){
       const sel = document.getElementById('fMonths');
       const opt = [...sel.options].find(o=>o.value == String(parsed.months));
@@ -404,6 +550,7 @@ document.getElementById('addBtn').addEventListener('click', async ()=>{
     date,
     months: document.getElementById('fMonths').value,
     store: document.getElementById('fStore').value.trim(),
+    cat: document.getElementById('fCat').value,
     extended: false
   });
   await save();
@@ -451,7 +598,7 @@ function openLetter(it){
   document.getElementById('modal').classList.add('open');
 }
 
-/* ---------- Calendar reminder (.ics content) ---------- */
+/* ---------- Calendar reminder ---------- */
 function openReminder(it){
   const end = endDateObj(it);
   const remind = new Date(end); remind.setDate(remind.getDate()-14);
