@@ -20,12 +20,22 @@ Open `index.html` in a browser, or serve it with GitHub Pages: in the repo setti
 
 ## Known limitations outside Claude
 
-This prototype was built to run inside a Claude artifact, where two capabilities are provided by the environment:
+This prototype was built to run inside a Claude artifact. One capability is still provided by that environment:
 
-1. **Receipt scanning** calls the Anthropic API without an API key, which only works inside Claude. On GitHub Pages the scan button will show an error and manual entry still works. To enable it on the open web, route the request through a small backend that holds your own Anthropic API key (never put the key in client-side code).
-2. **Persistence** uses the artifact storage API. Outside Claude, data is held in memory only and resets on refresh. Swap in `localStorage`, IndexedDB, or a backend for real persistence.
+**Receipt scanning** calls the Anthropic API without an API key, which only works inside Claude. Anywhere else the scan button reports why it failed and manual entry still works. To enable it on the open web, route the request through a small backend that holds your own Anthropic API key (never put the key in client-side code).
 
 Everything else — logging, countdowns, alerts, claim letters, reminders, extensions — works anywhere.
+
+## Where your data lives
+
+Your vault is stored on your own device. The app uses the artifact storage API when running inside Claude, and falls back to `localStorage` in any ordinary browser, so data survives a refresh on GitHub Pages or from a local file. Your item records are never uploaded — the only thing that leaves the browser is a receipt photo you choose to scan, sent to the Anthropic API for that one request.
+
+Two consequences worth knowing:
+
+- It is **per browser, per device**. There is no sync, and no export yet, so clearing site data clears the vault.
+- Storage can be unavailable — private-browsing modes and a full quota both make writes fail. When that happens the app says so in a banner rather than pretending the item was filed. If it finds stored data it cannot read, it stops saving instead of overwriting it, so a recoverable copy is left alone under the `vault-items` key.
+
+For sync across devices or a real backup, this is the seam to replace: `load()` and `save()` near the top of the script are the only functions that touch storage.
 
 ## Roadmap
 
@@ -34,6 +44,27 @@ Everything else — logging, countdowns, alerts, claim letters, reminders, exten
 - Multi-photo product records (receipt + serial number + damage photos for claims)
 - Household sharing
 
+## Tests
+
+The app itself stays dependency-free; the test suite is dev-only tooling.
+
+```
+npm install
+npx playwright install chromium
+npm test
+```
+
+42 tests drive `index.html` in a real browser (Playwright + the built-in
+`node --test` runner), so they exercise the browser's own `Date` and `Intl`
+behaviour rather than a stand-in. Coverage: date handling across six
+timezones from UTC-8 to UTC+14, month-end and DST edges, `.ics` validity
+against RFC 5545, storage-failure and corrupt-data paths, the receipt-scan
+request shape and each of its error paths, and the claim-letter, download,
+clipboard, search and escaping behaviour of the UI.
+
+CI runs the same suite on every pull request (`.github/workflows/ci.yml`).
+
 ## Tech
 
-Single-file HTML/CSS/JS. No frameworks, no build step, no dependencies.
+Single-file HTML/CSS/JS. No frameworks, no build step, no runtime
+dependencies.
