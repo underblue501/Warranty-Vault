@@ -233,6 +233,23 @@
   .letter .btn{margin-top:12px}
   .letter .close{background:none;border:none;color:var(--ink-soft);width:100%;padding:10px;font-family:'Courier New',monospace;font-size:12px;text-decoration:underline;cursor:pointer}
 
+  .vault-tools{
+    display:flex;justify-content:center;gap:22px;margin-top:22px;
+  }
+  .vault-tools button{
+    background:none;border:none;cursor:pointer;color:#9FB0CE;
+    font-family:'Courier New',monospace;font-size:12px;letter-spacing:.06em;
+    text-decoration:underline;padding:6px 2px;
+  }
+  .vault-tools button:disabled{opacity:.45;cursor:default;text-decoration:none}
+  .vault-tools button:focus-visible{outline:2px solid #9FB0CE;outline-offset:2px}
+  #importStatus{
+    display:none;margin-top:10px;text-align:center;
+    font-family:'Courier New',monospace;font-size:12px;color:#9FB0CE;
+  }
+  #importStatus.err{color:#FF9B9B}
+  #importStatus.ok{color:#8FD9B6}
+
   @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -255,7 +272,7 @@
   <div class="alerts" id="alerts" style="display:none"></div>
 
   <div class="ledger" id="ledger" style="display:none">
-    <h2>Vault ledger <span class="led-actions"><button id="exportBtn">export</button><button id="ledgerToggle">hide</button></span></h2>
+    <h2>Vault ledger <span class="led-actions"><button id="ledgerToggle">hide</button></span></h2>
     <div id="ledgerBody"></div>
   </div>
 
@@ -308,6 +325,15 @@
 
   <div id="list"></div>
   <p class="empty" id="emptyMsg">The vault is empty. Log your first purchase above — future-you will thank you.</p>
+
+  <!-- Outside the ledger, which only renders once there are items: restoring a
+       backup into a fresh browser is exactly the empty-vault case. -->
+  <div class="vault-tools">
+    <button id="exportBtn">⭳ export vault</button>
+    <button id="importBtn">⭱ import backup</button>
+    <input type="file" id="importInput" accept="application/json,.json" style="display:none">
+  </div>
+  <p id="importStatus"></p>
 </div>
 
 <div class="modal" id="modal">
@@ -523,6 +549,8 @@ function render(){
   renderChips();
 
   document.getElementById('toolbar').style.display = items.length ? 'block' : 'none';
+  // Import stays available on an empty vault; there is nothing to export from one.
+  document.getElementById('exportBtn').disabled = !items.length;
   document.getElementById('stCount').textContent = items.length;
   document.getElementById('stValue').textContent = '$' + value.toLocaleString();
   document.getElementById('stSoon').textContent = soon;
@@ -565,6 +593,112 @@ document.getElementById('ledgerToggle').addEventListener('click', ()=>{
 /* The vault lives only in this browser, so a download is the one way to keep
    a copy of it — before clearing site data, moving browsers, or removing an
    item. */
+/* ---------- Import ----------
+   Merges by id and never removes anything: restoring into a fresh browser is
+   the main case, where merge and replace are identical, and merging cannot
+   destroy a vault the way replacing a populated one could. */
+function normaliseImported(raw){
+  if(!raw || typeof raw !== 'object') return null;
+  const name = String(raw.name == null ? '' : raw.name).trim();
+  const date = parseLocalDate(raw.date) ? String(raw.date).slice(0, 10) : null;
+  if(!name || !date) return null;   // an item without these cannot be rendered
+
+  const num = (v, fallback) => {
+    const n = Number(v);
+    return isFinite(n) && n >= 0 ? n : fallback;
+  };
+  const months = num(raw.months, 12);
+  const base = raw.baseMonths == null ? months : num(raw.baseMonths, months);
+  const added = num(raw.extensionMonths, 0);
+  return {
+    id: raw.id == null || String(raw.id) === '' ? newId() : String(raw.id),
+    name,
+    date,
+    price: raw.price == null || raw.price === '' ? null : num(raw.price, null),
+    months,
+    baseMonths: base,
+    extensionMonths: added,
+    store: String(raw.store == null ? '' : raw.store).trim(),
+    cat: CATS.includes(raw.cat) ? raw.cat : 'Other',
+    extended: raw.extended === true
+  };
+}
+
+function setImportStatus(msg, kind){
+  const el = document.getElementById('importStatus');
+  el.textContent = msg;
+  el.className = kind || '';
+  el.style.display = 'block';
+}
+
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  document.getElementById('importInput').click();
+});
+
+document.getElementById('importInput').addEventListener('change', async ()=>{
+  const file = document.getElementById('importInput').files[0];
+  document.getElementById('importInput').value = '';
+  if(!file) return;
+
+  if(storageBroken){
+    setImportStatus('Saving is paused, so an import would not stick. Reload once the stored data is readable.', 'err');
+    return;
+  }
+
+  let text;
+  try{
+    text = await file.text();
+  }catch(e){
+    setImportStatus('That file could not be read.', 'err');
+    return;
+  }
+
+  let payload;
+  try{
+    payload = JSON.parse(text);
+  }catch(e){
+    setImportStatus('That is not a Warranty Vault backup — it is not valid JSON.', 'err');
+    return;
+  }
+
+  // Accept an export file or a bare array of items.
+  const incoming = Array.isArray(payload) ? payload
+    : (payload && Array.isArray(payload.items) ? payload.items : null);
+  if(!incoming){
+    setImportStatus('That JSON file has no vault items in it.', 'err');
+    return;
+  }
+
+  const seen = new Set(items.map(i=>String(i.id)));
+  let added = 0, skipped = 0, rejected = 0;
+  for(const raw of incoming){
+    const item = normaliseImported(raw);
+    if(!item){ rejected++; continue; }
+    if(seen.has(String(item.id))){ skipped++; continue; }
+    seen.add(String(item.id));
+    items.push(item);
+    added++;
+  }
+
+  if(!added){
+    const why = rejected && !skipped ? 'Nothing in that file looked like a vault item.'
+      : skipped ? 'Everything in that file is already in your vault.'
+      : 'That file had nothing to import.';
+    setImportStatus(why, rejected && !skipped ? 'err' : '');
+    render();
+    return;
+  }
+
+  const saved = await save();
+  render();
+  if(saved === false) return;   // save() already explains the failure
+
+  const parts = [added + (added === 1 ? ' item imported' : ' items imported')];
+  if(skipped) parts.push(skipped + ' already in the vault');
+  if(rejected) parts.push(rejected + ' unreadable and skipped');
+  setImportStatus('✓ ' + parts.join(' · ') + '.', 'ok');
+});
+
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   if(!items.length){ alert('The vault is empty — there is nothing to export yet.'); return; }
   const payload = JSON.stringify(
