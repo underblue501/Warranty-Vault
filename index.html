@@ -44,6 +44,13 @@
   .stat b{display:block;font-family:'Courier New',monospace;font-size:20px}
   .stat span{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-soft)}
 
+  .notice{
+    background:#FDECEC;border:1px solid #DFA0A0;border-radius:6px;
+    padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.5;
+  }
+  .notice b{font-family:'Courier New',monospace;font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--stamp);display:block;margin-bottom:4px}
+
   .alerts{
     background:#FFF6E8;border:1px solid #E8C98F;border-radius:6px;
     padding:12px 14px;margin-bottom:16px;font-size:14px;line-height:1.5;
@@ -240,6 +247,8 @@
     <div class="stat"><b id="stSoon">0</b><span>Expiring soon</span></div>
   </div>
 
+  <div class="notice" id="notice" style="display:none"></div>
+
   <div class="alerts" id="alerts" style="display:none"></div>
 
   <div class="ledger" id="ledger" style="display:none">
@@ -301,6 +310,7 @@
     <h3 id="modalTitle">Claim letter — ready to send</h3>
     <pre id="letterText"></pre>
     <button class="btn" id="copyBtn">Copy letter</button>
+    <button class="btn" id="downloadBtn" style="display:none">Download .ics file</button>
     <button class="close" id="closeBtn">Close</button>
   </div>
 </div>
@@ -310,40 +320,105 @@ let items = [];
 let searchQ = '';
 let filterCat = 'All';
 let ledgerOpen = true;
+let storageBroken = false;
 const KEY = 'vault-items';
 const CATS = ['Electronics','Appliances','Furniture','Tools','Outdoor','Other'];
 
+function showNotice(msg){
+  const el = document.getElementById('notice');
+  el.innerHTML = '<b>Heads up</b>' + esc(msg);
+  el.style.display = 'block';
+}
+function clearNotice(){ document.getElementById('notice').style.display = 'none'; }
+
 async function load(){
+  let raw = null;
   try{
     if(window.storage){
       const r = await window.storage.get(KEY);
-      if(r && r.value) items = JSON.parse(r.value);
+      raw = r && r.value;
     } else if(window.localStorage){
-      const v = localStorage.getItem(KEY);
-      if(v) items = JSON.parse(v);
+      raw = localStorage.getItem(KEY);
     }
-  }catch(e){ items = items.length ? items : []; }
+  }catch(e){
+    storageBroken = true;
+    showNotice('Your saved vault could not be read (' + e.message + '). Saving is paused so nothing already stored gets overwritten.');
+  }
+  if(raw){
+    try{
+      const parsed = JSON.parse(raw);
+      if(!Array.isArray(parsed)) throw new Error('stored value is not a list of items');
+      items = parsed;
+    }catch(e){
+      // Refuse to touch data we cannot parse — a save here would destroy it.
+      storageBroken = true;
+      items = [];
+      showNotice('Your saved vault could not be read, so it is not shown here. Saving is paused so the stored copy is left intact — it is still under the key "' + KEY + '" in this browser.');
+    }
+  }
   render();
 }
+
 async function save(){
+  if(storageBroken){
+    showNotice('Not saved. Saving is paused because the data already in storage could not be read, and overwriting it would lose it.');
+    return false;
+  }
   try{
     if(window.storage) await window.storage.set(KEY, JSON.stringify(items));
     else if(window.localStorage) localStorage.setItem(KEY, JSON.stringify(items));
-  }catch(e){}
+    else throw new Error('this browser has no storage available');
+    clearNotice();
+    return true;
+  }catch(e){
+    showNotice('Not saved — ' + e.message + '. Your vault is only held in memory and will be lost on refresh. Private browsing or a full storage quota is the usual cause.');
+    return false;
+  }
 }
 
-function daysLeft(it){
-  const end = new Date(it.date);
-  end.setMonth(end.getMonth() + Number(it.months));
-  return Math.ceil((end - new Date()) / 86400000);
+/* A "YYYY-MM-DD" string parses as UTC midnight but renders in local time, which
+   pushes every date back a day for anyone west of UTC. Build and read dates from
+   local components throughout so what is stored is what is shown. */
+function parseLocalDate(v){
+  if(v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+  if(!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d) ? null : d;
 }
+function toISODate(d){
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function today(){
+  const t = new Date();
+  return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+}
+/* Clamp to the last day of the target month: Jan 31 + 1 month is Feb 28, not Mar 3. */
+function addMonths(d, n){
+  const t = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const lastDay = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  t.setDate(Math.min(d.getDate(), lastDay));
+  return t;
+}
+
 function endDateObj(it){
-  const end = new Date(it.date);
-  end.setMonth(end.getMonth() + Number(it.months));
-  return end;
+  const start = parseLocalDate(it.date);
+  return start ? addMonths(start, Number(it.months) || 0) : null;
+}
+function daysLeft(it){
+  const end = endDateObj(it);
+  if(!end) return -1;
+  // Both ends are local midnights; round absorbs the 23/25-hour DST days.
+  return Math.round((end - today()) / 86400000);
 }
 function endDate(it){
-  return endDateObj(it).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+  const end = endDateObj(it);
+  return end ? end.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : '\u2014';
+}
+function buyDate(it){
+  const d = parseLocalDate(it.date);
+  return d ? d.toLocaleDateString() : '\u2014';
 }
 function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
 function catOf(it){ return CATS.includes(it.cat) ? it.cat : 'Other'; }
@@ -364,21 +439,22 @@ function render(){
 
   sorted.forEach(it=>{
     const d = daysLeft(it);
-    if(d > 0) value += Number(it.price)||0;
-    if(d > 0 && d <= 30){ soon++; expiring.push(it); }
+    if(d >= 0) value += Number(it.price)||0;
+    if(d >= 0 && d <= 30){ soon++; expiring.push(it); }
   });
 
   visible.forEach(it=>{
     const d = daysLeft(it);
     let cls='safe', txt = d + ' days left';
-    if(d <= 0){ cls='dead'; txt='Expired'; }
+    if(d < 0){ cls='dead'; txt='Expired'; }
+    else if(d === 0){ cls='warn'; txt='⚠ Last day'; }
     else if(d <= 30){ cls='warn'; txt='⚠ ' + d + ' days left'; }
 
     const card = document.createElement('div');
     card.className='receipt';
 
     let offerHtml = '';
-    if(d > 0 && d <= 30 && !it.extended){
+    if(d >= 0 && d <= 30 && !it.extended){
       const yearly = Math.max(9, Math.round((Number(it.price)||100) * 0.10));
       offerHtml =
         '<div class="offer"><p><b>Partner offer · simulated</b>'+
@@ -389,7 +465,7 @@ function render(){
 
     card.innerHTML =
       '<div class="rc-top"><div><div class="rc-name">'+esc(it.name)+'</div>'+
-      '<div class="rc-meta">'+esc(it.store||'—')+' · bought '+new Date(it.date).toLocaleDateString()+' · covered thru '+endDate(it)+'</div>'+
+      '<div class="rc-meta">'+esc(it.store||'—')+' · bought '+buyDate(it)+' · covered thru '+endDate(it)+'</div>'+
       '<span class="rc-cat">'+catOf(it)+'</span></div>'+
       '<div class="stamp '+cls+'">'+txt+'</div></div>'+
       '<hr class="rc-line">'+
@@ -409,7 +485,10 @@ function render(){
   if(expiring.length){
     alerts.style.display='block';
     alerts.innerHTML = '<b>Expiry watch</b>' +
-      expiring.map(it=>esc(it.name)+' — '+daysLeft(it)+' days remaining').join('<br>') +
+      expiring.map(it=>{
+        const d = daysLeft(it);
+        return esc(it.name) + ' — ' + (d === 0 ? 'last day of coverage' : d + ' days remaining');
+      }).join('<br>') +
       '<br><span style="font-size:12px;color:var(--ink-soft)">Tap "Remind me" on an item to add a calendar reminder.</span>';
   } else {
     alerts.style.display='none';
@@ -438,7 +517,7 @@ function renderLedger(){
   let activeVal = 0, expiredVal = 0, activeCount = 0, expiredCount = 0;
   items.forEach(it=>{
     const c = catOf(it), v = Number(it.price)||0;
-    const alive = daysLeft(it) > 0;
+    const alive = daysLeft(it) >= 0;
     if(alive){ byCat[c] = (byCat[c]||0) + v; activeVal += v; activeCount++; }
     else { expiredVal += v; expiredCount++; }
   });
@@ -489,14 +568,18 @@ scanInput.addEventListener('change', async ()=>{
     const base64 = await new Promise((res, rej)=>{
       const r = new FileReader();
       r.onload = ()=>res(r.result.split(',')[1]);
-      r.onerror = ()=>rej(new Error('Could not read the image.'));
+      r.onerror = ()=>rej(new Error('the image file could not be read.'));
       r.readAsDataURL(file);
     });
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{
+        'Content-Type':'application/json',
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
       body: JSON.stringify({
-        model:'claude-sonnet-4-6',
+        model:'claude-sonnet-5',
         max_tokens:1000,
         messages:[{
           role:'user',
@@ -508,10 +591,18 @@ scanInput.addEventListener('change', async ()=>{
         }]
       })
     });
-    const data = await response.json();
+    const data = await response.json().catch(()=>null);
+    if(!response.ok){
+      const detail = data && data.error && data.error.message;
+      throw new Error(detail || ('the service returned ' + response.status + ' ' + response.statusText + '.'));
+    }
+    if(!data) throw new Error('the response could not be read.');
     const text = (data.content||[]).map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(text);
-    if(parsed.error) throw new Error('That image does not look like a receipt.');
+    if(!text) throw new Error('the service returned an empty response.');
+    let parsed;
+    try{ parsed = JSON.parse(text); }
+    catch(e){ throw new Error('the receipt could not be read from that image.'); }
+    if(parsed.error) throw new Error('that image does not look like a receipt.');
 
     if(parsed.name) document.getElementById('fName').value = parsed.name;
     if(parsed.price != null) document.getElementById('fPrice').value = parsed.price;
@@ -525,7 +616,8 @@ scanInput.addEventListener('change', async ()=>{
     }
     setStatus('✓ Fields filled from your receipt. Check them, then file it.','ok');
   }catch(err){
-    setStatus('Scan failed — '+err.message+' You can still enter it by hand.','err');
+    const why = /[.!?]$/.test(err.message) ? err.message : err.message + '.';
+    setStatus('Scan failed — ' + why + ' You can still enter it by hand.','err');
   }finally{
     scanZone.classList.remove('busy');
     scanInput.value='';
@@ -587,7 +679,7 @@ function openLetter(it){
 'To the Customer Service team' + (it.store ? ' at '+it.store : '') + ',\n\n' +
 'I am writing to file a warranty claim for the following purchase:\n\n' +
 '  Item:            ' + it.name + '\n' +
-'  Purchase date:   ' + new Date(it.date).toLocaleDateString() + '\n' +
+'  Purchase date:   ' + buyDate(it) + '\n' +
 '  Purchase price:  $' + Number(it.price||0).toLocaleString() + '\n' +
 '  Coverage ends:   ' + endDate(it) + '\n\n' +
 'The item has developed a fault within the warranty period, and I am requesting a repair, replacement, or refund as provided under the terms of the warranty. I have my proof of purchase available on request.\n\n' +
@@ -595,37 +687,129 @@ function openLetter(it){
 'Thank you,\n[Your name]\n[Your contact details]';
   document.getElementById('letterText').textContent = txt;
   document.getElementById('copyBtn').textContent = 'Copy letter';
+  document.getElementById('downloadBtn').style.display = 'none';
+  pendingIcs = null;
   document.getElementById('modal').classList.add('open');
 }
 
 /* ---------- Calendar reminder ---------- */
-function openReminder(it){
+/* RFC 5545: TEXT values escape \\ ; , and newlines, and lines fold at 75 octets. */
+function icsEscape(v){
+  return String(v == null ? '' : v)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+function icsFold(line){
+  const bytes = new TextEncoder().encode(line);
+  if(bytes.length <= 75) return line;
+  const dec = new TextDecoder();
+  const out = [];
+  let start = 0, limit = 75;
+  while(start < bytes.length){
+    let end = Math.min(start + limit, bytes.length);
+    // Never split a multi-byte UTF-8 sequence across the fold.
+    while(end > start + 1 && end < bytes.length && (bytes[end] & 0xC0) === 0x80) end--;
+    out.push(dec.decode(bytes.subarray(start, end)));
+    start = end;
+    limit = 74; // continuation lines are prefixed with a space
+  }
+  return out.join('\r\n ');
+}
+function icsDate(d){ return toISODate(d).replace(/-/g, ''); }
+function icsStamp(d){ return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); }
+
+function buildIcs(it){
   const end = endDateObj(it);
-  const remind = new Date(end); remind.setDate(remind.getDate()-14);
-  const stamp = d => d.toISOString().slice(0,10).replace(/-/g,'');
-  const ics =
-'BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//WarrantyVault//EN\nBEGIN:VEVENT\n' +
-'UID:' + it.id + '@warrantyvault\n' +
-'DTSTART;VALUE=DATE:' + stamp(remind) + '\n' +
-'SUMMARY:Warranty ending soon: ' + it.name + '\n' +
-'DESCRIPTION:Coverage on ' + it.name + ' ends ' + endDate(it) + '. Check it over and file any claim before then.\n' +
-'END:VEVENT\nEND:VCALENDAR';
+  if(!end) return null;
+  const remind = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 14);
+  // DTEND on an all-day event is exclusive, so it is the day after DTSTART.
+  const dayAfter = new Date(remind.getFullYear(), remind.getMonth(), remind.getDate() + 1);
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//WarrantyVault//EN',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    'UID:' + it.id + '@warrantyvault',
+    'DTSTAMP:' + icsStamp(new Date()),
+    'DTSTART;VALUE=DATE:' + icsDate(remind),
+    'DTEND;VALUE=DATE:' + icsDate(dayAfter),
+    'SUMMARY:' + icsEscape('Warranty ending soon: ' + it.name),
+    'DESCRIPTION:' + icsEscape('Coverage on ' + it.name + ' ends ' + endDate(it) + '. Check it over and file any claim before then.'),
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].map(icsFold).join('\r\n') + '\r\n';
+}
+
+let pendingIcs = null;
+
+function openReminder(it){
+  const ics = buildIcs(it);
+  if(!ics){ alert('That item has no usable purchase date, so no reminder can be built.'); return; }
+  pendingIcs = { text: ics, name: (String(it.name || 'warranty').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'warranty') + '.ics' };
   document.getElementById('modalTitle').textContent = 'Calendar reminder — 2 weeks before expiry';
   document.getElementById('letterText').textContent = ics;
   document.getElementById('copyBtn').textContent = 'Copy .ics text';
+  document.getElementById('downloadBtn').style.display = 'block';
   document.getElementById('modal').classList.add('open');
 }
 
-document.getElementById('copyBtn').addEventListener('click', ()=>{
-  navigator.clipboard.writeText(document.getElementById('letterText').textContent)
-    .then(()=>{ const b=document.getElementById('copyBtn'); const old=b.textContent;
-      b.textContent='Copied ✓'; setTimeout(()=>b.textContent=old,1500); });
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  if(!pendingIcs) return;
+  const url = URL.createObjectURL(new Blob([pendingIcs.text], {type:'text/calendar;charset=utf-8'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = pendingIcs.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+});
+
+/* navigator.clipboard is undefined outside a secure context, so guard it and
+   fall back rather than throwing into an unhandled rejection. */
+async function copyText(text){
+  try{
+    if(window.isSecureContext && navigator.clipboard){
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  }catch(e){ /* fall through to the textarea path */ }
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly','');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }catch(e){ return false; }
+}
+
+function selectLetterText(){
+  const pre = document.getElementById('letterText');
+  const r = document.createRange();
+  r.selectNodeContents(pre);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+document.getElementById('copyBtn').addEventListener('click', async ()=>{
+  const b = document.getElementById('copyBtn');
+  const old = b.textContent;
+  const ok = await copyText(document.getElementById('letterText').textContent);
+  if(!ok) selectLetterText();
+  b.textContent = ok ? 'Copied ✓' : 'Press Ctrl/⌘+C to copy';
+  setTimeout(()=>{ b.textContent = old; }, ok ? 1500 : 3500);
 });
 document.getElementById('closeBtn').addEventListener('click', ()=>{
   document.getElementById('modal').classList.remove('open');
 });
 
-document.getElementById('fDate').valueAsDate = new Date();
+// .valueAsDate reads UTC components and can prefill tomorrow late in the day.
+document.getElementById('fDate').value = toISODate(new Date());
 load();
 </script>
 </body>
