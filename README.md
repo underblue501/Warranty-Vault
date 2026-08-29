@@ -34,6 +34,27 @@ Everything else — logging, countdowns, alerts, claim letters, reminders, exten
 - Multi-photo product records (receipt + serial number + damage photos for claims)
 - Household sharing
 
+## Tests
+
+The app itself stays dependency-free; the test suite is dev-only tooling.
+
+```
+npm install
+npx playwright install chromium
+npm test
+```
+
+42 tests drive `index.html` in a real browser (Playwright + the built-in
+`node --test` runner), so they exercise the browser's own `Date` and `Intl`
+behaviour rather than a stand-in. Coverage: date handling across six
+timezones from UTC-8 to UTC+14, month-end and DST edges, `.ics` validity
+against RFC 5545, storage-failure and corrupt-data paths, the receipt-scan
+request shape and each of its error paths, and the claim-letter, download,
+clipboard, search and escaping behaviour of the UI.
+
+CI runs the same suite on every pull request (`.github/workflows/ci.yml`).
+
 ## Tech
 
-Single-file HTML/CSS/JS. No frameworks, no build step, no dependencies.
+Single-file HTML/CSS/JS. No frameworks, no build step, no runtime
+dependencies.
