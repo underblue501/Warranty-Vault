@@ -11,6 +11,7 @@ Every year, people spend money on repairs and replacements for products that wer
 - **Expiry watch** — a banner surfaces anything expiring within 30 days, and each item can generate a calendar reminder (.ics) set for two weeks before coverage ends
 - **One-tap claim letters** — a professionally worded warranty claim, pre-filled with your purchase details, ready to copy and send
 - **Coverage extension offers** — items entering their final 30 days surface an extend-coverage option (simulated in this demo; this is the affiliate revenue hook in production)
+- **Export** — download the whole vault as JSON, so a browser change or a cleared cache is not the end of your records
 
 ## Running it
 
@@ -32,7 +33,7 @@ Your vault is stored on your own device. The app uses the artifact storage API w
 
 Two consequences worth knowing:
 
-- It is **per browser, per device**. There is no sync, and no export yet, so clearing site data clears the vault.
+- It is **per browser, per device**. There is no sync, so clearing site data clears the vault — use **export** in the ledger header to keep a JSON copy first. Restoring one is still manual; an import button is the obvious next step.
 - Storage can be unavailable — private-browsing modes and a full quota both make writes fail. When that happens the app says so in a banner rather than pretending the item was filed. If it finds stored data it cannot read, it stops saving instead of overwriting it, so a recoverable copy is left alone under the `vault-items` key.
 
 For sync across devices or a real backup, this is the seam to replace: `load()` and `save()` near the top of the script are the only functions that touch storage.
@@ -54,13 +55,17 @@ npx playwright install chromium
 npm test
 ```
 
-42 tests drive `index.html` in a real browser (Playwright + the built-in
+51 tests drive `index.html` in a real browser (Playwright + the built-in
 `node --test` runner), so they exercise the browser's own `Date` and `Intl`
 behaviour rather than a stand-in. Coverage: date handling across six
 timezones from UTC-8 to UTC+14, month-end and DST edges, `.ics` validity
 against RFC 5545, storage-failure and corrupt-data paths, the receipt-scan
 request shape and each of its error paths, and the claim-letter, download,
 clipboard, search and escaping behaviour of the UI.
+
+Colour contrast is measured from the browser's own computed styles rather
+than from hex literals, so retuning the palette re-checks it against the
+WCAG AA 4.5:1 threshold automatically.
 
 CI runs the same suite on every pull request (`.github/workflows/ci.yml`).
 
