@@ -12,7 +12,9 @@
     --paper-edge:#EDEDE6;
     --stamp:#C8102E;
     --safe:#1F7A4D;
-    --warn:#B26A00;
+    /* Clears 4.5:1 as text on the card (5.79) and on the alert band (5.65),
+       and under white button text (6.06). The previous #B26A00 failed all three. */
+    --warn:#8F5500;
     --line:#D8D8CE;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -67,6 +69,7 @@
     text-transform:uppercase;letter-spacing:.2em;color:var(--ink-soft);
     margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;
   }
+  .led-actions{display:flex;gap:12px}
   .ledger h2 button{
     background:none;border:none;cursor:pointer;color:var(--ink-soft);
     font-family:'Courier New',monospace;font-size:11px;text-decoration:underline;
@@ -252,7 +255,7 @@
   <div class="alerts" id="alerts" style="display:none"></div>
 
   <div class="ledger" id="ledger" style="display:none">
-    <h2>Vault ledger <button id="ledgerToggle">hide</button></h2>
+    <h2>Vault ledger <span class="led-actions"><button id="exportBtn">export</button><button id="ledgerToggle">hide</button></span></h2>
     <div id="ledgerBody"></div>
   </div>
 
@@ -420,6 +423,19 @@ function buyDate(it){
   const d = parseLocalDate(it.date);
   return d ? d.toLocaleDateString() : '\u2014';
 }
+/* Two items filed in the same millisecond used to share an id, and removing
+   one then removed both. */
+function newId(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  if(window.crypto && crypto.getRandomValues){
+    const a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    return [...a].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+const sameId = (a, b) => String(a) === String(b);
+
 function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
 function catOf(it){ return CATS.includes(it.cat) ? it.cat : 'Other'; }
 
@@ -537,12 +553,37 @@ document.getElementById('ledgerToggle').addEventListener('click', ()=>{
   ledgerOpen = !ledgerOpen; renderLedger();
 });
 
+/* The vault lives only in this browser, so a download is the one way to keep
+   a copy of it — before clearing site data, moving browsers, or removing an
+   item. */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(!items.length){ alert('The vault is empty — there is nothing to export yet.'); return; }
+  const payload = JSON.stringify(
+    { app:'warranty-vault', version:1, exported:new Date().toISOString(), items }, null, 2);
+  const url = URL.createObjectURL(new Blob([payload], {type:'application/json'}));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'warranty-vault-' + toISODate(new Date()) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+});
+
 /* ---------- Search + chips ---------- */
+let chipsKey = null;
 function renderChips(){
+  const el = document.getElementById('chips');
   const present = ['All', ...CATS.filter(c=>items.some(it=>catOf(it)===c))];
-  document.getElementById('chips').innerHTML = present.map(c=>
-    '<button class="chip'+(filterCat===c?' on':'')+'" data-cat="'+c+'">'+c+'</button>'
-  ).join('');
+  const key = present.join('|');
+  /* Rebuild only when the set of categories changes. Replacing the buttons on
+     every render — which includes every search keystroke — moved focus off a
+     chip the keyboard was using. */
+  if(key !== chipsKey){
+    chipsKey = key;
+    el.innerHTML = present.map(c=>
+      '<button class="chip" data-cat="'+c+'">'+c+'</button>'
+    ).join('');
+  }
+  for(const b of el.children) b.classList.toggle('on', b.dataset.cat === filterCat);
 }
 document.getElementById('chips').addEventListener('click', e=>{
   if(e.target.dataset.cat){ filterCat = e.target.dataset.cat; render(); }
@@ -636,7 +677,7 @@ document.getElementById('addBtn').addEventListener('click', async ()=>{
   const date = document.getElementById('fDate').value;
   if(!name || !date){ alert('An item name and purchase date are needed to file it.'); return; }
   items.push({
-    id: Date.now(),
+    id: newId(),
     name,
     price: document.getElementById('fPrice').value,
     date,
@@ -659,13 +700,17 @@ document.getElementById('list').addEventListener('click', async e=>{
         ext = e.target.dataset.extend,
         rem = e.target.dataset.remind;
   if(del){
-    items = items.filter(i=>i.id != del);
+    const it = items.find(i=>sameId(i.id, del));
+    if(!it) return;
+    if(!confirm('Remove "' + it.name + '" from the vault?\n\nThis cannot be undone. Export first if you want a copy.')) return;
+    items = items.filter(i=>!sameId(i.id, del));
     await save(); render();
   }
-  if(clm) openLetter(items.find(i=>i.id == clm));
-  if(rem) openReminder(items.find(i=>i.id == rem));
+  if(clm) openLetter(items.find(i=>sameId(i.id, clm)));
+  if(rem) openReminder(items.find(i=>sameId(i.id, rem)));
   if(ext){
-    const it = items.find(i=>i.id == ext);
+    const it = items.find(i=>sameId(i.id, ext));
+    if(!it) return;
     it.months = Number(it.months) + 12;
     it.extended = true;
     await save(); render();
