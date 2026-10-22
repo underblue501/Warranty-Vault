@@ -19,6 +19,11 @@ The app is a single dependency-free HTML file.
 
 Open `index.html` in a browser, or serve it with GitHub Pages: in the repo settings, enable Pages from the main branch and it will be live at `https://<your-username>.github.io/<repo-name>/`.
 
+It also packages as a **browser extension** — `npm run build:extension`, then
+see [`extension/`](extension/). Orion, Chrome and Firefox all install the
+result; inside an extension the vault keeps its data in extension storage
+rather than `localStorage`.
+
 ## Receipt scanning on the open web
 
 Out of the box the page calls the Anthropic API directly, which only works
@@ -86,8 +91,13 @@ The backend has its own 13 tests (`npm test --prefix backend`) that inject a
 fake scanner, so they cover CORS, the origin check, the rate limiter, payload
 validation and error mapping without calling Anthropic or spending anything.
 
-CI runs both suites, plus a backend typecheck, on every pull request
-(`.github/workflows/ci.yml`).
+The extension has 6 more (`npm run test:extension`), including one that loads
+the packaged build into Chromium and reads an item back out of
+`chrome.storage.local` — the only way to prove extension CSP actually runs the
+packaged script.
+
+CI runs all three suites, plus a backend typecheck and an extension build, on
+every pull request (`.github/workflows/ci.yml`).
 
 ## Tech
 

@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Warranty Vault",
+  "version": "1.0.0",
+  "description": "Track every warranty you own, get warned before coverage expires, and generate a claim letter when something breaks.",
+  "homepage_url": "https://github.com/underblue501/Warranty-Vault",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Open Warranty Vault",
+    "default_popup": "launch.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "permissions": ["storage"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "warranty-vault@underblue501.github.io",
+      "strict_min_version": "115.0"
+    }
+  }
+}

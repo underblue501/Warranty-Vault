@@ -366,10 +366,27 @@ function showNotice(msg){
 }
 function clearNotice(){ document.getElementById('notice').style.display = 'none'; }
 
+/* Present only when the page is running as a browser extension. Preferred over
+   localStorage there: extension-page localStorage is cleared with site data,
+   chrome.storage.local is not. */
+const extStorage = (() => {
+  const api = globalThis.browser?.storage?.local || globalThis.chrome?.storage?.local;
+  if(!api) return null;
+  return {
+    async get(key){
+      const r = await api.get(key);
+      return r ? r[key] : null;
+    },
+    set: (key, value) => api.set({ [key]: value })
+  };
+})();
+
 async function load(){
   let raw = null;
   try{
-    if(window.storage){
+    if(extStorage){
+      raw = await extStorage.get(KEY);
+    } else if(window.storage){
       const r = await window.storage.get(KEY);
       raw = r && r.value;
     } else if(window.localStorage){
@@ -400,7 +417,8 @@ async function save(){
     return false;
   }
   try{
-    if(window.storage) await window.storage.set(KEY, JSON.stringify(items));
+    if(extStorage) await extStorage.set(KEY, JSON.stringify(items));
+    else if(window.storage) await window.storage.set(KEY, JSON.stringify(items));
     else if(window.localStorage) localStorage.setItem(KEY, JSON.stringify(items));
     else throw new Error('this browser has no storage available');
     clearNotice();
