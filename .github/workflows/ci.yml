@@ -47,6 +47,12 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Build the browser extension
+        run: npm run build:extension
+
+      - name: Test the browser extension
+        run: npm run test:extension
+
       - name: Install backend dependencies
         run: npm ci --prefix backend
         env:

@@ -1,0 +1,13 @@
+/* The toolbar popup. It exists only to hand off to a full tab: the vault is a
+   long scrolling list and a form, which a 400px popup would cramp. */
+body{
+  margin:0;
+  padding:18px 20px;
+  min-width:220px;
+  background:#1B2A4A;
+  color:#9FB0CE;
+  font-family:'Courier New',Courier,monospace;
+  font-size:13px;
+  text-align:center;
+}
+a{color:#FAFAF7}
