@@ -56,6 +56,39 @@ Two consequences worth knowing:
 
 For sync across devices or a real backup, this is the seam to replace: `load()` and `save()` near the top of the script are the only functions that touch storage.
 
+## Branch protection
+
+`.github/ruleset.json` is the branch ruleset for `main`: a pull request is
+required (with no approvals, since one person has write access), the `test`
+check must pass, the branch is up to date before merging, and force pushes
+and deletion are blocked. Nothing is exempt — the bypass list is empty.
+
+GitHub does not read this file. It is the payload for the rulesets API, kept
+in version control so the configuration is reviewable and re-appliable rather
+than living only in the web UI:
+
+```bash
+# first time
+gh api -X POST repos/<owner>/<repo>/rulesets --input .github/ruleset.json
+# updating the existing one (find the id with: gh api repos/<owner>/<repo>/rulesets)
+gh api -X PUT repos/<owner>/<repo>/rulesets/<id> --input .github/ruleset.json
+```
+
+Confirm it applied — this reports what GitHub actually enforces on the
+branch, rather than what the ruleset claims:
+
+```bash
+gh api repos/<owner>/<repo>/rules/branches/main
+```
+
+An empty `[]` means the ruleset is matching no branches, which is how a
+ruleset can read as "active" in the UI while protecting nothing.
+
+Only `test` is required. `main` also carries `build`, `deploy` and
+`report-build-status` from GitHub Pages, and those never run on a pull
+request — requiring one would leave every PR waiting forever on a check that
+cannot report.
+
 ## Roadmap
 
 - Push/email notifications ahead of expiry
@@ -73,7 +106,7 @@ npx playwright install chromium
 npm test
 ```
 
-84 tests drive `index.html` in a real browser (Playwright + the built-in
+84 of those drive `index.html` in a real browser (Playwright + the built-in
 `node --test` runner), so they exercise the browser's own `Date` and `Intl`
 behaviour rather than a stand-in. Coverage: date handling across six
 timezones from UTC-8 to UTC+14, month-end and DST edges, `.ics` validity
@@ -95,6 +128,9 @@ The extension has 6 more (`npm run test:extension`), including one that loads
 the packaged build into Chromium and reads an item back out of
 `chrome.storage.local` — the only way to prove extension CSP actually runs the
 packaged script.
+
+Five more check `.github/ruleset.json`, which GitHub does not validate for
+you and which is applied by hand.
 
 CI runs all three suites, plus a backend typecheck and an extension build, on
 every pull request (`.github/workflows/ci.yml`).
